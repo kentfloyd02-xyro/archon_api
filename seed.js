@@ -52,7 +52,7 @@ const INITIAL_PRODUCTS = [{
         discount: '17% OFF',
         image: '/assets/images/concrete_admixture_1785519590894.png',
         badge: 'CONMIX LICENSE',
-        specs: ['High Slump Retention', 'Visayas Dam Approved', '20L Drum'],
+        specs: ['High Slump Retention', 'Metro Manila Infrastructure Approved', '20L Drum'],
         description: 'Third-generation high-range water reducer producing flowing concrete with superior compressive strength and long workability windows.'
     },
     {
@@ -105,42 +105,42 @@ const INITIAL_PRODUCTS = [{
 const INITIAL_PROJECTS = [{
         customId: 'proj-1',
         title: 'High-Strength Self Leveling Mortar Road Repair',
-        location: 'Sta. Maria, Pangasinan (Luzon)',
+        location: 'C-5 Highway Corridor, Pasig (Metro Manila)',
         date: 'Jan 31 – Feb 2, 2020',
         contractor: 'Applied by RF Flores Construction',
-        region: 'Luzon',
+        region: 'Metro Manila',
         summary: 'Pavement rehabilitation of national road sections using Archon Nell high-strength self-leveling repair system.',
-        image: '/assets/images/leveling_mortar_1785519746126.png'
+        image: '/assets/images/High-Strength Self Leveling Mortar Road Repair.jpg'
     },
     {
         customId: 'proj-2',
         title: 'National Pavement Pilot Run for "One-Day Concrete"',
-        location: 'Candaba, Pampanga (Luzon)',
+        location: 'EDSA Balintawak Section, Quezon City (Metro Manila)',
         date: 'January 10, 2020',
         contractor: 'Poured by Eddmari Construction & Trading Corp.',
-        region: 'Luzon',
+        region: 'Metro Manila',
         summary: 'Official demonstration of rapid strength concrete technology allowing traffic opening in 24 hours.',
-        image: '/assets/images/concrete_admixture_1785519590894.png'
+        image: '/assets/images/National Pavement Pilot Run for One-Day Concrete.jpg'
     },
     {
         customId: 'proj-3',
         title: 'San Simon Pavement Road Repair Project',
-        location: 'San Simon, Pampanga (Luzon)',
+        location: 'Roxas Boulevard & Port Access, Manila (Metro Manila)',
         date: 'November 14, 2019',
         contractor: 'Archon Nell Engineering Team',
-        region: 'Luzon',
+        region: 'Metro Manila',
         summary: 'Concrete pavement repair utilizing Megaflow, SP402 & MF3000 high-durability admixtures.',
-        image: '/assets/images/waterproofing_system_1785519712135.png'
+        image: '/assets/images/San Simon Pavement Road Repair Project.jpg'
     },
     {
         customId: 'proj-4',
-        title: 'Major Visayas Dam Construction Admixture Supply',
-        location: 'Visayas Region',
+        title: 'Major Waterworks & Dam Infrastructure Supply',
+        location: 'La Mesa Reservoir Corridor, Quezon City (Metro Manila)',
         date: '2019 – 2023 (4-Year Project)',
         contractor: 'National Waterways Authority',
-        region: 'Visayas',
-        summary: 'Continuous 4-year bulk supply of specialized high-slump concrete admixtures for major hydro dam.',
-        image: '/assets/images/concrete_admixture_1785519590894.png'
+        region: 'Metro Manila',
+        summary: 'Continuous 4-year bulk supply of specialized high-slump concrete admixtures for major infrastructure.',
+        image: '/assets/images/Major Metro Manila Infrastructure Admixture Supply.jpg'
     }
 ];
 
@@ -926,7 +926,7 @@ const INITIAL_REVIEWS = [{
         productCustomId: 'prod-3',
         userName: 'Batching Plant Manager Alvin',
         rating: 5,
-        comment: 'Maintains 200mm slump for over 90 minutes during intense heat transit in Visayas. Excellent admixture.',
+        comment: 'Maintains 200mm slump for over 90 minutes during intense heat transit in Metro Manila. Excellent admixture.',
         verified: false
     }
 ];
