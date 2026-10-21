@@ -80,7 +80,7 @@ const INITIAL_PRODUCTS = [{
         sold: 430,
         rating: 4.9,
         discount: '18% OFF',
-        image: '/assets/images/MF3000 Concrete Pavement Road Additive (25kg Bag).png',
+        image: '/assets/images/mf3000_concrete_pavement_road_additive.png',
         badge: 'HIGH STRENGTH',
         specs: ['San Simon Project Spec', 'Heavy Axle Load', '25kg Bag'],
         description: 'Polymer fiber reinforcement compound delivering exceptional flexural strength under severe tollway wheel friction.'
@@ -95,7 +95,7 @@ const INITIAL_PRODUCTS = [{
         sold: 510,
         rating: 5.0,
         discount: '20% OFF',
-        image: '/assets/images/Rapid 24-Hour Concrete Accelerator Compound (15L).png',
+        image: '/assets/images/rapid_24h_concrete_accelerator_compound.png',
         badge: 'HIGHWAY SPEC',
         specs: ['Candaba Pampanga Pilot Run', '1-Day Heavy Traffic Load'],
         description: 'Chloride-free rapid setting hardening agent accelerating early compressive strength gain for critical rush road projects.'
