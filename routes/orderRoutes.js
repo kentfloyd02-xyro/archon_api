@@ -31,7 +31,6 @@ router.get('/', async(req, res) => {
     }
 });
 
-
 router.get('/:orderNumber', async(req, res) => {
     try {
         const order = await Order.findOne({ orderNumber: req.params.orderNumber });
@@ -68,7 +67,6 @@ router.post('/', async(req, res) => {
             return res.status(400).json({ error: 'Order must contain at least one item' });
         }
 
-        // Security: Block Admin accounts from placing orders (Customer-only feature)
         if (customerEmail) {
             const User = (await import('../models/User.js')).default;
             const user = await User.findOne({ email: customerEmail.toLowerCase().trim() });
@@ -96,7 +94,6 @@ router.post('/', async(req, res) => {
                 }
             } catch (e) {}
         }
-
 
         for (const item of items) {
             const product = await Product.findOne({
@@ -195,7 +192,6 @@ router.put('/:orderNumber/status', async(req, res) => {
 
         const currentStatus = order.status;
 
-        // Terminal statuses cannot be updated
         if (currentStatus === 'DELIVERED') {
             return res.status(400).json({ error: 'Order is already Delivered. Status cannot be modified.' });
         }
@@ -217,7 +213,6 @@ router.put('/:orderNumber/status', async(req, res) => {
 
         const targetStatus = statusMap[newStatus?.toLowerCase()] || newStatus?.toUpperCase();
 
-        // Sequential enforcement: CONFIRMED -> PREPARING -> IN_TRANSIT -> DELIVERED
         const allowedNextMap = {
             'CONFIRMED': 'PREPARING',
             'PENDING': 'PREPARING',
@@ -418,6 +413,44 @@ router.put('/:orderNumber/refund/approve', async(req, res) => {
         res.json({ success: true, message: 'Refund approved and stock updated', order });
     } catch (err) {
         res.status(500).json({ error: 'Failed to approve refund', details: err.message });
+    }
+});
+
+router.put('/:orderNumber/rate', async(req, res) => {
+    try {
+        const { orderNumber } = req.params;
+        const { rating, notes } = req.body;
+
+        const numRating = Number(rating);
+        if (!numRating || numRating < 1 || numRating > 5) {
+            return res.status(400).json({ error: 'Rating must be between 1 and 5 stars' });
+        }
+
+        const trimmedNotes = String(notes || '').trim();
+        if (trimmedNotes.length < 15) {
+            return res.status(400).json({ error: 'Notes must be at least 15 characters' });
+        }
+        if (trimmedNotes.length > 60) {
+            return res.status(400).json({ error: 'Notes cannot exceed 60 characters' });
+        }
+
+        const order = await Order.findOne({ orderNumber });
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        if (order.status !== 'DELIVERED') {
+            return res.status(400).json({ error: 'Only delivered orders can be rated' });
+        }
+
+        order.rating = numRating;
+        order.notes = trimmedNotes;
+        order.ratedAt = new Date();
+
+        await order.save();
+        res.json({ success: true, message: 'Order rated successfully', order });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to rate order', details: err.message });
     }
 });
 

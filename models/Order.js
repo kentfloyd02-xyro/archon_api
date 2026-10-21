@@ -67,7 +67,10 @@ const orderSchema = new mongoose.Schema({
     cancelledAt: { type: Date },
 
     trackingTimeline: [trackingStepSchema],
-    refundDetails: refundDetailsSchema
+    refundDetails: refundDetailsSchema,
+    rating: { type: Number, min: 1, max: 5 },
+    notes: { type: String, maxlength: 60 },
+    ratedAt: { type: Date }
 }, { timestamps: true });
 
 export default mongoose.model('Order', orderSchema);

@@ -8,12 +8,6 @@ import { logAuditEvent } from "../utils/auditLogger.js";
 
 const router = express.Router();
 
-// Password Policy Validator:
-// - At least 8 characters
-// - At least 1 uppercase letter
-// - At least 1 lowercase letter
-// - At least 1 number
-// - At least 1 special character
 export function validatePasswordPolicy(password) {
   if (!password || typeof password !== "string") {
     return { valid: false, message: "Password is required." };
@@ -36,7 +30,6 @@ export function validatePasswordPolicy(password) {
   return { valid: true };
 }
 
-// 1. STEP 1: LOGIN CREDENTIALS CHECK -> ENFORCES 5 ATTEMPTS LIMIT OR DISPATCHES 2FA OTP
 router.post("/login-init", async (req, res) => {
   try {
     const { email, password, deviceId, trustDevice } = req.body;
@@ -58,7 +51,6 @@ router.post("/login-init", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    // Check if account is locked due to 5 previous failed password attempts
     if (user.isPasswordResetRequired || (user.failedLoginAttempts || 0) >= 5) {
       return res.status(403).json({
         error: "Account locked after 5 failed password attempts. You must reset your password to regain access.",
@@ -108,12 +100,10 @@ router.post("/login-init", async (req, res) => {
       }
     }
 
-    // Password is correct: reset failed login attempts counter
     user.failedLoginAttempts = 0;
     user.isPasswordResetRequired = false;
     await user.save();
 
-    // Check if device is trusted for 5 days
     const cleanDeviceId = deviceId ? String(deviceId).trim() : null;
     const now = new Date();
     const isDeviceTrusted = cleanDeviceId && Array.isArray(user.trustedDevices) && user.trustedDevices.some(
@@ -143,15 +133,14 @@ router.post("/login-init", async (req, res) => {
           company: user.company || "",
           role: user.role,
           defaultAddress: user.defaultAddress || "",
-          preferences: user.preferences
+          preferences: user.preferences,
+          privacyConsent: user.privacyConsent || { granted: true, consentedAt: user.createdAt || new Date(), policyVersion: 'RA10173-2026.1' }
         }
       });
     }
 
-    // Generate 6-digit OTP code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Delete previous pending OTPs
     await Otp.deleteMany({ email: cleanEmail });
 
     const newOtp = new Otp({
@@ -163,7 +152,6 @@ router.post("/login-init", async (req, res) => {
     });
     await newOtp.save();
 
-    // Send 2FA email via Brevo SMTP
     let emailResult = { sent: false };
     try {
       emailResult = await sendOtpEmail(cleanEmail, code, "Login 2FA Verification");
@@ -194,7 +182,6 @@ router.post("/login-init", async (req, res) => {
   }
 });
 
-// 2. STEP 2: VERIFY LOGIN OTP -> ENFORCES 5 ATTEMPTS LIMIT (ABORTS ON 5TH ERROR)
 router.post("/login-verify-otp", async (req, res) => {
   try {
     const { email, code, deviceId, trustDevice } = req.body;
@@ -213,7 +200,6 @@ router.post("/login-verify-otp", async (req, res) => {
       });
     }
 
-    // Check if already reached 5 attempts
     if (otpRecord.attempts >= 5) {
       await Otp.deleteMany({ email: cleanEmail });
       await logAuditEvent({
@@ -228,7 +214,6 @@ router.post("/login-verify-otp", async (req, res) => {
       });
     }
 
-    // Check code correctness
     if (otpRecord.code !== code.trim()) {
       otpRecord.attempts = (otpRecord.attempts || 0) + 1;
 
@@ -263,20 +248,16 @@ router.post("/login-verify-otp", async (req, res) => {
       }
     }
 
-    // Correct OTP: delete used record
     await Otp.deleteMany({ email: cleanEmail });
 
-    // Load User
     const user = await User.findOne({ email: cleanEmail });
     if (!user) {
       return res.status(404).json({ error: "User account not found" });
     }
 
-    // Reset failed login attempts
     user.failedLoginAttempts = 0;
     user.isPasswordResetRequired = false;
 
-    // Save trusted device for 5 days if requested
     if (trustDevice && deviceId) {
       const cleanDeviceId = String(deviceId).trim();
       const expiresAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000); // 5 days from now
@@ -312,7 +293,8 @@ router.post("/login-verify-otp", async (req, res) => {
         company: user.company || "",
         role: user.role,
         defaultAddress: user.defaultAddress || "",
-        preferences: user.preferences
+        preferences: user.preferences,
+        privacyConsent: user.privacyConsent || { granted: true, consentedAt: user.createdAt || new Date(), policyVersion: 'RA10173-2026.1' }
       }
     });
   } catch (err) {
@@ -320,7 +302,6 @@ router.post("/login-verify-otp", async (req, res) => {
   }
 });
 
-// 3. FORGOT PASSWORD - STEP 1: SEND RESET OTP
 router.post("/forgot-password-init", async (req, res) => {
   try {
     const { email } = req.body;
@@ -336,7 +317,6 @@ router.post("/forgot-password-init", async (req, res) => {
       return res.status(404).json({ error: "No account found with this email address" });
     }
 
-    // Enforce 60s cooldown if OTP already requested
     const existingOtp = await Otp.findOne({ email: cleanEmail });
     if (existingOtp && existingOtp.lastSentAt) {
       const elapsedSec = (Date.now() - new Date(existingOtp.lastSentAt).getTime()) / 1000;
@@ -389,7 +369,6 @@ router.post("/forgot-password-init", async (req, res) => {
   }
 });
 
-// 4. FORGOT PASSWORD - STEP 2: VERIFY OTP & UPDATE PASSWORD (WITH PASSWORD POLICY CHECK)
 router.post("/forgot-password-verify", async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
@@ -398,7 +377,6 @@ router.post("/forgot-password-verify", async (req, res) => {
       return res.status(400).json({ error: "Email, OTP code, and new password are required" });
     }
 
-    // Password Policy Check
     const pwdCheck = validatePasswordPolicy(newPassword);
     if (!pwdCheck.valid) {
       return res.status(400).json({ error: pwdCheck.message });
@@ -421,7 +399,6 @@ router.post("/forgot-password-verify", async (req, res) => {
       return res.status(400).json({ error: `Invalid OTP code. Attempt ${otpRecord.attempts} of 5.` });
     }
 
-    // Delete used OTP
     await Otp.deleteMany({ email: cleanEmail });
 
     const user = await User.findOne({ email: cleanEmail });
@@ -429,7 +406,6 @@ router.post("/forgot-password-verify", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Update password & clear lock
     user.password = newPassword;
     user.failedLoginAttempts = 0;
     user.isPasswordResetRequired = false;
@@ -452,7 +428,6 @@ router.post("/forgot-password-verify", async (req, res) => {
   }
 });
 
-// 5. RESEND OTP (WITH 1-MINUTE COOLDOWN)
 router.post("/resend-otp", async (req, res) => {
   try {
     const { email, purpose = "Verification Code" } = req.body;
@@ -463,7 +438,6 @@ router.post("/resend-otp", async (req, res) => {
 
     const cleanEmail = email.toLowerCase().trim();
 
-    // Check 1-minute (60 seconds) cooldown
     const existingOtp = await Otp.findOne({ email: cleanEmail });
     if (existingOtp && existingOtp.lastSentAt) {
       const elapsedSec = (Date.now() - new Date(existingOtp.lastSentAt).getTime()) / 1000;
@@ -514,7 +488,6 @@ router.post("/resend-otp", async (req, res) => {
   }
 });
 
-// 6. REGISTER NEW CUSTOMER (WITH PASSWORD POLICY CHECK)
 router.post("/register", async (req, res) => {
   try {
     const { name, email, password, phone, company, defaultAddress } = req.body;
@@ -523,7 +496,6 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Name, email, and password are required" });
     }
 
-    // Enforce Password Policy
     const pwdCheck = validatePasswordPolicy(password);
     if (!pwdCheck.valid) {
       return res.status(400).json({ error: pwdCheck.message });
@@ -542,7 +514,12 @@ router.post("/register", async (req, res) => {
       phone: phone || "",
       company: company || "",
       role: "customer",
-      defaultAddress: defaultAddress || ""
+      defaultAddress: defaultAddress || "",
+      privacyConsent: {
+        granted: true,
+        consentedAt: new Date(),
+        policyVersion: "RA10173-2026.1"
+      }
     });
 
     const saved = await newUser.save();
@@ -553,7 +530,7 @@ router.post("/register", async (req, res) => {
       user: saved,
       req,
       target: saved.email,
-      details: `New customer registered: ${saved.name} (${saved.email})`
+      details: `New customer registered: ${saved.name} (${saved.email}) [RA 10173 Consent Granted]`
     });
 
     res.status(201).json({
@@ -568,7 +545,8 @@ router.post("/register", async (req, res) => {
         company: saved.company,
         role: saved.role,
         defaultAddress: saved.defaultAddress,
-        preferences: saved.preferences
+        preferences: saved.preferences,
+        privacyConsent: saved.privacyConsent
       }
     });
   } catch (err) {
@@ -576,7 +554,6 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// 7. GET ME
 router.get("/me", protect, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select("-password");
@@ -592,14 +569,14 @@ router.get("/me", protect, async (req, res) => {
       company: user.company || "",
       role: user.role,
       defaultAddress: user.defaultAddress || "",
-      preferences: user.preferences
+      preferences: user.preferences,
+      privacyConsent: user.privacyConsent || { granted: true, consentedAt: user.createdAt || new Date(), policyVersion: 'RA10173-2026.1' }
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch user profile", details: err.message });
   }
 });
 
-// 8. GET ALL CUSTOMERS (Admin Console)
 router.get("/customers", async (req, res) => {
   try {
     const customers = await User.find({ role: "customer" }).select("-password").sort({ createdAt: -1 });
@@ -609,7 +586,6 @@ router.get("/customers", async (req, res) => {
   }
 });
 
-// 9. UPDATE PROFILE
 router.put("/profile", protect, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -617,12 +593,22 @@ router.put("/profile", protect, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const { name, phone, company, defaultAddress, preferences } = req.body;
+    const { name, phone, company, defaultAddress, preferences, privacyConsent } = req.body;
     if (name) user.name = name.trim();
     if (phone !== undefined) user.phone = phone;
     if (company !== undefined) user.company = company;
     if (defaultAddress !== undefined) user.defaultAddress = defaultAddress;
     if (preferences) user.preferences = { ...user.preferences, ...preferences };
+    if (privacyConsent !== undefined) {
+      const isGranted = typeof privacyConsent === 'boolean'
+        ? privacyConsent
+        : Boolean(privacyConsent?.granted);
+      user.privacyConsent = {
+        granted: isGranted,
+        consentedAt: new Date(),
+        policyVersion: privacyConsent?.policyVersion || 'RA10173-2026.1'
+      };
+    }
 
     await user.save();
 
@@ -631,7 +617,7 @@ router.put("/profile", protect, async (req, res) => {
       user,
       req,
       target: user.email,
-      details: `Profile updated by ${user.name}`
+      details: `Profile updated by ${user.name} (Data Privacy Consent: ${user.privacyConsent?.granted ? 'GRANTED' : 'WITHHELD'})`
     });
 
     res.json({
@@ -645,7 +631,8 @@ router.put("/profile", protect, async (req, res) => {
         company: user.company,
         role: user.role,
         defaultAddress: user.defaultAddress,
-        preferences: user.preferences
+        preferences: user.preferences,
+        privacyConsent: user.privacyConsent
       }
     });
   } catch (err) {

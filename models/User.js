@@ -13,6 +13,11 @@ const userSchema = new mongoose.Schema({
         smsAlerts: { type: Boolean, default: true },
         emailReceipts: { type: Boolean, default: true }
     },
+    privacyConsent: {
+        granted: { type: Boolean, default: true },
+        consentedAt: { type: Date, default: Date.now },
+        policyVersion: { type: String, default: 'RA10173-2026.1' }
+    },
     failedLoginAttempts: { type: Number, default: 0 },
     isPasswordResetRequired: { type: Boolean, default: false },
     trustedDevices: [{
