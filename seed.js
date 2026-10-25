@@ -1,5 +1,8 @@
 import 'dotenv/config';
+import dns from 'dns';
 import mongoose from 'mongoose';
+
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 import fs from 'fs';
 import path from 'path';
 import Product from './models/Product.js';
@@ -899,9 +902,6 @@ async function seedDatabase() {
         // 7. Insert Audit Logs
         await AuditLog.insertMany(INITIAL_AUDIT_LOGS);
         console.log(`Seeded ${INITIAL_AUDIT_LOGS.length} audit logs`);
-
-        // 8. Sync frontend data file
-        syncFrontendInitialData(INITIAL_PRODUCTS, INITIAL_PROJECTS, INITIAL_REVIEWS, INITIAL_ORDERS);
 
         // Verification summary
         const deliveredCount = INITIAL_ORDERS.filter(o => o.status === 'DELIVERED').length;

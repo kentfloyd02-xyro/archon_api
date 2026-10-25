@@ -1,10 +1,13 @@
 import 'dotenv/config';
+import dns from 'dns';
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
+
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 import authRoutes from './routes/authRoutes.js';
 import productRoutes from './routes/productRoutes.js';
@@ -74,6 +77,15 @@ app.get('/', (req, res) => {
     });
 });
 
+app.get('/api/health', (req, res) => {
+    const isDbConnected = mongoose.connection.readyState === 1;
+    res.json({
+        status: isDbConnected ? 'ok' : 'degraded',
+        database: isDbConnected ? 'connected' : 'disconnected',
+        timestamp: new Date().toISOString()
+    });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
@@ -97,17 +109,20 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/archon_nell_db';
 
-mongoose.connect(MONGO_URI)
-    .then(() => {
-        console.log('MongoDB connected successfully to:', MONGO_URI);
-        app.listen(PORT, () => {
-            console.log(`Archon Nell API server listening on http://localhost:${PORT}`);
-        });
-    })
-    .catch((err) => {
-        console.error('MongoDB connection error:', err.message);
-        console.log('Starting server in offline mode...');
-        app.listen(PORT, () => {
-            console.log(`Server listening on http://localhost:${PORT} (Database not connected)`);
-        });
+async function startServer() {
+    let dbConnected = false;
+
+    try {
+        await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 10000 });
+        console.log('Online MongoDB Atlas connected successfully to:', MONGO_URI.replace(/:[^:]*@/, ':****@'));
+        dbConnected = true;
+    } catch (err) {
+        console.error('Online MongoDB Atlas connection error:', err.message);
+    }
+
+    app.listen(PORT, () => {
+        console.log(`Archon Nell API server listening on port ${PORT} [Online DB: ${dbConnected ? 'CONNECTED' : 'OFFLINE'}]`);
     });
+}
+
+startServer();
