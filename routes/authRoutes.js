@@ -160,33 +160,28 @@ router.post("/login-init", async (req, res) => {
       lastSentAt: new Date(),
       isVerified: false
     });
+    // Save OTP to database immediately
     await newOtp.save();
 
-    let emailResult = { sent: false };
-    try {
-      emailResult = await sendOtpEmail(cleanEmail, code, "Login 2FA Verification");
-    } catch (mailErr) {
-      console.error("Brevo Login OTP Error:", mailErr.message);
-      emailResult = { sent: false, error: mailErr.message };
-    }
+    // Fire and forget email dispatch in background so user doesn't wait for SMTP network latency
+    sendOtpEmail(cleanEmail, code, "Login 2FA Verification").catch(mailErr => {
+      console.error("Brevo Login OTP Background Error:", mailErr.message);
+    });
 
-    await logAuditEvent({
+    logAuditEvent({
       action: "LOGIN_OTP_DISPATCHED",
       user,
       req,
       target: cleanEmail,
-      details: `2FA security verification code sent via Brevo SMTP (Email sent: ${emailResult.sent})`
-    });
+      details: `2FA security verification code sent via Brevo SMTP to: ${cleanEmail}`
+    }).catch(() => {});
 
     res.json({
       success: true,
       requireOtp: true,
       email: cleanEmail,
       emailMasked: maskEmail(cleanEmail),
-      emailSent: emailResult.sent,
-      message: emailResult.sent 
-        ? `Security verification code sent to ${maskEmail(cleanEmail)}` 
-        : `Verification code generated for ${maskEmail(cleanEmail)}`
+      message: `Security verification code dispatched to ${maskEmail(cleanEmail)}`
     });
   } catch (err) {
     res.status(500).json({ error: "Login failed", details: err.message });
@@ -354,28 +349,25 @@ router.post("/forgot-password-init", async (req, res) => {
     });
     await newOtp.save();
 
-    let emailResult = { sent: false };
-    try {
-      emailResult = await sendOtpEmail(cleanEmail, code, "Password Reset");
-    } catch (mailErr) {
-      console.error("Brevo Password Reset Error:", mailErr.message);
-      emailResult = { sent: false, error: mailErr.message };
-    }
+    // Fire email in background
+    sendOtpEmail(cleanEmail, code, "Password Reset").catch(mailErr => {
+      console.error("Brevo Password Reset Background Error:", mailErr.message);
+    });
 
-    await logAuditEvent({
+    logAuditEvent({
       action: "PASSWORD_RESET_INIT",
       user,
       req,
       target: cleanEmail,
       details: `Password reset OTP dispatched to ${cleanEmail}`
-    });
+    }).catch(() => {});
 
     res.json({
       success: true,
       requireOtp: true,
       email: cleanEmail,
-      emailSent: emailResult.sent,
-      message: `Password reset verification code dispatched to ${cleanEmail}`
+      emailMasked: maskEmail(cleanEmail),
+      message: `Password reset verification code dispatched to ${maskEmail(cleanEmail)}`
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to process reset request", details: err.message });
@@ -475,28 +467,25 @@ router.post("/resend-otp", async (req, res) => {
       lastSentAt: new Date(),
       isVerified: false
     });
+    // Save OTP to database immediately
     await newOtp.save();
 
-    let emailResult = { sent: false };
-    try {
-      emailResult = await sendOtpEmail(cleanEmail, code, purpose);
-    } catch (mailErr) {
-      console.error("Brevo Resend OTP Error:", mailErr.message);
-      emailResult = { sent: false, error: mailErr.message };
-    }
+    // Fire email in background
+    sendOtpEmail(cleanEmail, code, purpose).catch(mailErr => {
+      console.error("Brevo Resend OTP Background Error:", mailErr.message);
+    });
 
-    await logAuditEvent({
+    logAuditEvent({
       action: "OTP_RESENT",
       req,
       target: cleanEmail,
       details: `New verification code resent to ${cleanEmail} (Purpose: ${purpose})`
-    });
+    }).catch(() => {});
 
     res.json({
       success: true,
       message: `New verification code dispatched to ${maskEmail(cleanEmail)}`,
       emailMasked: maskEmail(cleanEmail),
-      emailSent: emailResult.sent,
       cooldownSeconds: 60
     });
   } catch (err) {
