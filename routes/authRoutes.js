@@ -1,10 +1,19 @@
 import express from "express";
+import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import Order from "../models/Order.js";
 import Otp from "../models/Otp.js";
 import { generateToken, protect, requireAdmin } from "../middleware/authMiddleware.js";
 import { sendOtpEmail } from "../config/mailer.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+
+// Helper: Mask sensitive email (e.g., k***d@gmail.com)
+function maskEmail(email) {
+  if (!email || !email.includes('@')) return '***';
+  const [local, domain] = email.split('@');
+  if (local.length <= 2) return `${local[0]}*@${domain}`;
+  return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
+}
 
 const router = express.Router();
 
@@ -140,12 +149,13 @@ router.post("/login-init", async (req, res) => {
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = await bcrypt.hash(code, 10);
 
     await Otp.deleteMany({ email: cleanEmail });
 
     const newOtp = new Otp({
       email: cleanEmail,
-      code,
+      code: hashedCode,
       attempts: 0,
       lastSentAt: new Date(),
       isVerified: false
@@ -172,10 +182,11 @@ router.post("/login-init", async (req, res) => {
       success: true,
       requireOtp: true,
       email: cleanEmail,
+      emailMasked: maskEmail(cleanEmail),
       emailSent: emailResult.sent,
       message: emailResult.sent 
-        ? `Security verification code sent to ${cleanEmail}` 
-        : `Verification code generated for ${cleanEmail}`
+        ? `Security verification code sent to ${maskEmail(cleanEmail)}` 
+        : `Verification code generated for ${maskEmail(cleanEmail)}`
     });
   } catch (err) {
     res.status(500).json({ error: "Login failed", details: err.message });
@@ -214,7 +225,8 @@ router.post("/login-verify-otp", async (req, res) => {
       });
     }
 
-    if (otpRecord.code !== code.trim()) {
+    const isMatch = await bcrypt.compare(code.trim(), otpRecord.code);
+    if (!isMatch) {
       otpRecord.attempts = (otpRecord.attempts || 0) + 1;
 
       if (otpRecord.attempts >= 5) {
@@ -330,11 +342,12 @@ router.post("/forgot-password-init", async (req, res) => {
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = await bcrypt.hash(code, 10);
     await Otp.deleteMany({ email: cleanEmail });
 
     const newOtp = new Otp({
       email: cleanEmail,
-      code,
+      code: hashedCode,
       attempts: 0,
       lastSentAt: new Date(),
       isVerified: false
@@ -389,7 +402,8 @@ router.post("/forgot-password-verify", async (req, res) => {
       return res.status(400).json({ error: "No active verification code found or code has expired. Please click Resend Code." });
     }
 
-    if (otpRecord.code !== code.trim()) {
+    const isMatch = await bcrypt.compare(code.trim(), otpRecord.code);
+    if (!isMatch) {
       otpRecord.attempts = (otpRecord.attempts || 0) + 1;
       if (otpRecord.attempts >= 5) {
         await Otp.deleteMany({ email: cleanEmail });
@@ -451,11 +465,12 @@ router.post("/resend-otp", async (req, res) => {
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = await bcrypt.hash(code, 10);
     await Otp.deleteMany({ email: cleanEmail });
 
     const newOtp = new Otp({
       email: cleanEmail,
-      code,
+      code: hashedCode,
       attempts: 0,
       lastSentAt: new Date(),
       isVerified: false
@@ -479,7 +494,8 @@ router.post("/resend-otp", async (req, res) => {
 
     res.json({
       success: true,
-      message: `New verification code dispatched to ${cleanEmail}`,
+      message: `New verification code dispatched to ${maskEmail(cleanEmail)}`,
+      emailMasked: maskEmail(cleanEmail),
       emailSent: emailResult.sent,
       cooldownSeconds: 60
     });
@@ -577,7 +593,7 @@ router.get("/me", protect, async (req, res) => {
   }
 });
 
-router.get("/customers", async (req, res) => {
+router.get("/customers", protect, requireAdmin, async (req, res) => {
   try {
     const customers = await User.find({ role: "customer" }).select("-password").sort({ createdAt: -1 });
     res.json(customers);

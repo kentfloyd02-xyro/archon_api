@@ -2,26 +2,42 @@ import express from 'express';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import { logAuditEvent } from '../utils/auditLogger.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.get('/', async(req, res) => {
+router.get('/', protect, async(req, res) => {
     try {
         const { status, search } = req.query;
         const filter = {};
+
+        // Security role-based restriction:
+        // Admin can view all orders; regular customers can ONLY view their own orders
+        if (req.user.role !== 'admin') {
+            filter.$or = [
+                { user: req.user._id },
+                { customerEmail: req.user.email.toLowerCase().trim() }
+            ];
+        }
 
         if (status && status !== 'all') {
             filter.status = status;
         }
 
         if (search) {
-            filter.$or = [
+            const searchClause = [
                 { orderNumber: { $regex: search, $options: 'i' } },
                 { customerName: { $regex: search, $options: 'i' } },
                 { customerPhone: { $regex: search, $options: 'i' } },
                 { customerEmail: { $regex: search, $options: 'i' } },
                 { gcashRefNumber: { $regex: search, $options: 'i' } }
             ];
+            if (filter.$or) {
+                filter.$and = [{ $or: filter.$or }, { $or: searchClause }];
+                delete filter.$or;
+            } else {
+                filter.$or = searchClause;
+            }
         }
 
         const orders = await Order.find(filter).sort({ createdAt: -1 });
@@ -180,8 +196,11 @@ router.post('/', async(req, res) => {
     }
 });
 
-router.put('/:orderNumber/status', async(req, res) => {
+router.put('/:orderNumber/status', protect, async(req, res) => {
     try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Forbidden. Only administrators can update order status.' });
+        }
         const { orderNumber } = req.params;
         const { newStatus, performedBy } = req.body;
 
@@ -362,8 +381,11 @@ router.put('/:orderNumber/refund', async(req, res) => {
     }
 });
 
-router.put('/:orderNumber/refund/approve', async(req, res) => {
+router.put('/:orderNumber/refund/approve', protect, async(req, res) => {
     try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Forbidden. Only administrators can approve refund claims.' });
+        }
         const { orderNumber } = req.params;
         const { restoreStock = true, performedBy } = req.body;
 

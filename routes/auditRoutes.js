@@ -1,9 +1,10 @@
 import express from 'express';
 import AuditLog from '../models/AuditLog.js';
+import { protect, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+router.get('/', protect, requireAdmin, async (req, res) => {
     try {
         const { search, action, limit = 100 } = req.query;
         const query = {};

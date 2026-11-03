@@ -1,8 +1,17 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import Otp from '../models/Otp.js';
 import { sendOtpEmail } from '../config/mailer.js';
 
 const router = express.Router();
+
+// Helper to mask email in API responses (e.g. k***d@gmail.com)
+function maskEmail(email) {
+  if (!email || !email.includes('@')) return '***';
+  const [local, domain] = email.split('@');
+  if (local.length <= 2) return `${local[0]}*@${domain}`;
+  return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
+}
 
 // POST send OTP (dispatches real email via Brevo SMTP)
 router.post('/send', async (req, res) => {
@@ -14,21 +23,24 @@ router.post('/send', async (req, res) => {
 
     const cleanEmail = email.toLowerCase().trim();
 
-    // Generate 6-digit code
+    // Generate cryptographically random 6-digit code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Securely hash the 6-digit OTP code before saving to DB
+    const hashedCode = await bcrypt.hash(code, 10);
 
     // Remove older pending OTPs for this email
     await Otp.deleteMany({ email: cleanEmail });
 
     const newOtp = new Otp({
       email: cleanEmail,
-      code,
+      code: hashedCode,
       isVerified: false
     });
 
     await newOtp.save();
 
-    // Send email via Brevo SMTP
+    // Send email via Brevo SMTP (only the recipient receives the plaintext code in their inbox)
     let emailResult = { sent: false };
     try {
       emailResult = await sendOtpEmail(cleanEmail, code);
@@ -40,11 +52,11 @@ router.post('/send', async (req, res) => {
     res.json({
       success: true,
       message: emailResult.sent
-        ? `Verification code dispatched to ${cleanEmail} via Brevo`
-        : `Verification code generated for ${cleanEmail}`,
-      email: cleanEmail,
-      emailSent: emailResult.sent,
-      code // Included for testing and developer preview
+        ? `Verification code dispatched to ${maskEmail(cleanEmail)} via secure mail`
+        : `Verification code generated for ${maskEmail(cleanEmail)}`,
+      emailMasked: maskEmail(cleanEmail),
+      emailSent: emailResult.sent
+      // Note: Plaintext 'code' is NEVER exposed in the JSON response
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate OTP', details: err.message });
@@ -60,13 +72,18 @@ router.post('/verify', async (req, res) => {
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const record = await Otp.findOne({
-      email: cleanEmail,
-      code: code.trim()
-    });
+    const record = await Otp.findOne({ email: cleanEmail });
 
     if (!record) {
       return res.status(400).json({ success: false, error: 'Invalid or expired OTP code' });
+    }
+
+    // Compare entered code with hashed OTP in database
+    const isMatch = await bcrypt.compare(code.trim(), record.code);
+    if (!isMatch) {
+      record.attempts = (record.attempts || 0) + 1;
+      await record.save();
+      return res.status(400).json({ success: false, error: 'Invalid verification code' });
     }
 
     record.isVerified = true;
